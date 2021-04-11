@@ -1,0 +1,14 @@
+
+# tfstate files
+*.tfstate.*
+*.tfstate
+
+.terraform
+*.iml
+*.lock.*
+*.code-workspace
+*.idea
+user_data.sh
+*.log
+*.pem
+inventory.txt
