@@ -10,6 +10,7 @@ resource "aws_instance" "docker" {
     instance_type = var.instance_type
     vpc_security_group_ids = [aws_security_group.docker.id] 
     key_name = var.key_name
+    user_data              = file("./docker_provisioning.sh")
     tags = {
     Name = "Wordpress server"
     Project = "AWS-Wordpress deployment"
