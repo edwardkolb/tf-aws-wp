@@ -1,5 +1,5 @@
 provider "aws" {
-    region     = var.region
+  region     = var.region
 }
 
 resource "aws_eip" "my_static_ip" {
@@ -14,7 +14,6 @@ resource "aws_instance" "jenkins" {
     instance_type = var.instance_type
     vpc_security_group_ids = [aws_security_group.jenkins_server.id] 
     key_name = var.key_name
-    
     tags = {
     Name = "Jenkins server"
     Project = "AWS-Wordpress deployment"
@@ -55,16 +54,30 @@ data "template_file" "inventory" {
   }
 }
 
+data "template_file" "var" {
+  template = file("${path.module}/ansible/var.tpl")
+  vars = {
+    host = aws_eip.my_static_ip.public_ip
+  }
+}
+
 # Create local ansible inventory file based on rendered content
 resource "local_file" "inventory" {
   filename = "${path.module}/ansible/inventory.txt"
   content = data.template_file.inventory.rendered
 }
 
+resource "local_file" "var" {
+  filename = "${path.module}/ansible/var.yml"
+  content = data.template_file.var.rendered
+}
 
 # Execute our ansible playbook
 resource "null_resource" "ansible_provision" {
-  depends_on = [ local_file.inventory ]
+  depends_on = [ 
+    local_file.inventory,
+    local_file.var
+     ]
   triggers = {
     template = data.template_file.inventory.rendered
   }

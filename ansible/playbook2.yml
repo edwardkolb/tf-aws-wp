@@ -1,6 +1,8 @@
 ---
 - hosts: all
-  become: yes
+  become: True
+  vars_files:
+    - var.yml
 
   tasks:
     - name: UPGRADE PACKAGES
@@ -47,4 +49,148 @@
         regexp: '^%sudo'
         line: '%sudo ALL=(ALL) NOPASSWD: ALL'
 
+    - name: WAIT FOR JENKINS TO START UP
+      uri:
+        url: "http://{{ host }}:8080/login?from=%2F"
+        status_code: 200
+        timeout: 5
+      register: jenkins_service_status
+      # Keep trying for 5 mins in 5 sec intervals
+      retries: 60
+      delay: 5
+      until: >
+         'status' in jenkins_service_status and
+         jenkins_service_status['status'] == 200
+
+    - name: READ ADMIN PASSWORD
+      shell: "cat /var/lib/jenkins/secrets/initialAdminPassword"
+      register: adminpwd
+
+    - name: UNLOCK AND ADD ADMIN USER
+      jenkins_script:
+        script: |
+          import jenkins.model.*
+          import hudson.security.*
+          def instance = Jenkins.getInstance()
+          def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+          hudsonRealm.createAccount('admin', 'admin')
+          instance.setSecurityRealm(hudsonRealm)
+          def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+          strategy.setAllowAnonymousRead(false)
+          instance.setAuthorizationStrategy(strategy)
+          instance.save()
+          import static jenkins.model.Jenkins.instance as jenkins
+          import jenkins.install.InstallState
+          if (!jenkins.installState.isSetupComplete()) {
+          InstallState.INITIAL_SETUP_COMPLETED.initializeState()
+          }
+        args:
+          user_pwd: admin
+        user: admin
+        password: "{{ adminpwd.stdout }}"
+  
+    - name: INSTALL PLUGINS
+      jenkins_plugin:
+        name: "{{ item }}"
+        url_username: admin
+        url_password: admin
+        url: http://{{ host }}:8080
+      with_items:
+      - ace-editor
+      - analysis-model-api
+      - ant
+      - antisamy-markup-formatter
+      - apache-httpcomponents-client-4-api
+      - bootstrap4-api
+      - bouncycastle-api
+      - branch-api
+      - build-timeout
+      - checks-api
+      - cloudbees-folder
+      - command-launcher
+      - credentials
+      - credentials-binding
+      - data-tables-api
+      - display-url-api
+      - durable-task
+      - echarts-api
+      - email-ext
+      - font-awesome-api
+      - forensics-api
+      - git
+      - git-client
+      - git-server
+      - github
+      - github-api
+      - github-branch-source
+      - gradle
+      - greenballs
+      - handlebars
+      - jackson2-api
+      - jaxb
+      - jdk-tool
+      - jjwt-api
+      - jquery3-api
+      - jsch
+      - junit
+      - ldap
+      - lockable-resources
+      - mailer
+      - matrix-auth
+      - matrix-project
+      - momentjs
+      - okhttp-api
+      - pam-auth
+      - pipeline-build-step
+      - pipeline-github-lib
+      - pipeline-graph-analysis
+      - pipeline-input-step
+      - pipeline-milestone-step
+      - pipeline-model-api
+      - pipeline-model-definition
+      - pipeline-model-extensions
+      - pipeline-rest-api
+      - pipeline-stage-step
+      - pipeline-stage-tags-metadata
+      - pipeline-stage-view
+      - plain-credentials
+      - plugin-util-api
+      - popper-api
+      - publish-over-ssh
+      - resource-disposer
+      - scm-api
+      - script-security
+      - snakeyaml-api
+      - ssh-credentials
+      - ssh-slaves
+      - structs
+      - timestamper
+      - token-macro
+      - trilead-api
+      - warnings-ng
+      - workflow-aggregator
+      - workflow-api
+      - workflow-basic-steps
+      - workflow-cps
+      - workflow-cps-global-lib
+      - workflow-durable-task-step
+      - workflow-job
+      - workflow-multibranch
+      - workflow-scm-step
+      - workflow-step-api
+      - workflow-support
+      - ws-cleanup
+      register: my_jenkins_plugin
+    
+    - name: CHECK IF RESTART IS REQUIRED
+      ansible.builtin.set_fact:
+        jenkins_restart_required: yes
+      when: item.changed
+      with_items: "{{ my_jenkins_plugin.results }}"
+
+    - name: RESTART JENKINS IF REQUIRED
+      ansible.builtin.service:
+        name: jenkins
+        state: restarted
+      when: jenkins_restart_required
 
