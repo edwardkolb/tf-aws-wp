@@ -1,0 +1,21 @@
+pipeline {
+    agent any
+    
+    stages{
+		stage ('Checkout') {
+			steps{
+ 			checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'aws-jenkins', url: 'git@github.com:edwardkolb/tf-aws-wp.git']]])
+		    }
+        }
+        stage ('Build') {
+            steps{
+            sshPublisher(publishers: [sshPublisherDesc(configName: 'ubuntu@172.31.36.31', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: '''sudo docker-compose down;sudo docker-compose up -d''', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '', remoteDirectorySDF: false, removePrefix: 'wordpress', sourceFiles: 'wordpress/docker-compose.yml, wordpress/nginx/*')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
+            }    
+        }
+    }
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}	
